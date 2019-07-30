@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='dfxapiclient',
-    version='1.0.0',
+    version='1.0.1',
     packages=['dfxapiclient'],
     install_requires=['asyncio', 'protobuf', 'requests', 'uuid', 'websockets'],
     setup_requires=['wheel'],
