@@ -43,7 +43,7 @@ class WebsocketHandler():
             raise Exception("Websocket not connected")
 
     async def handle_recieve(self):
-        if self.recv == True:
+        if self.recv:
             # Mutual exclusion lock; prevents multiple calls of recv() on the same websocket connection
             self.recv = False
             response = await self.ws.recv()
@@ -58,7 +58,7 @@ class WebsocketHandler():
 
             if len(response) == 13:
                 self.subscribeStats.append(response)
-            elif len(response) <= 53:
+            elif len(response) <= 60:
                 self.addDataStats.append(response)
             else:
                 self.chunks.append(response)
