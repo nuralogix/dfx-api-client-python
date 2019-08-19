@@ -95,8 +95,8 @@ class SimpleClient():
             self.websocket_url = "wss://demo.api.deepaffex.ai:9080"
 
         elif self.server == "prod":
-            self.server_url = "https://api2.api.deepaffex.ai:9443"
-            self.websocket_url = "wss://api2.api.deepaffex.ai:9080"
+            self.server_url = "https://api.deepaffex.ai:9443"
+            self.websocket_url = "wss://api.deepaffex.ai:9080"
 
         # China
         elif self.server == "prod-cn":

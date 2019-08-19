@@ -45,7 +45,6 @@ class Measurement:
             raise ValueError("No measurement ID given")
         uri = self.url + '/measurements/' + self.measurement_id
         r = requests.get(uri, headers=self.header)
-        print(r.json())
         return r.json()
 
     # 504

@@ -127,7 +127,7 @@ Finally, we need to sort the responses by type, to determine whether this is an 
 ```python
 if len(response) == 13:
     self.subscribeStats.append(response)
-elif len(response) <= 53:
+elif len(response) <= 60:
     self.addDataStats.append(response)
 else:
     self.chunks.append(response)

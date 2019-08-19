@@ -94,9 +94,8 @@ values = {
     "Identifier": orgID
 }
 
-header = {
-    'Content-Type': 'application/json'
-}
+auth = 'Bearer ' + api_token
+header = {'Content-Type': 'application/json', 'Authorization': auth}
 
 uri = self.server_url + '/organizations/auth'
 r = requests.post(uri, data=values, headers=header)
