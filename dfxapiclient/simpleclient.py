@@ -146,6 +146,7 @@ class SimpleClient():
         data["user_id"] = self.user_id
         data["user_token"] = self.user_token
         data["measurement_id"] = self.measurement_id
+        data["device_token"] = self.device_token
 
         with open(self.config_file) as f:
             # Record previous measurement_id and user_id if there is one already
@@ -172,19 +173,21 @@ class SimpleClient():
             with open(self.config_file, 'w') as f:
                 json.dump({}, f)
 
-        # Get device token by registering as part of an organization
-        out = self.organization.registerLicense(self.device_name)
-        if 'Token' not in out:
-            print("Registration error. Check your license key or server URL.")
-            return
-
-        self.device_token = out['Token']
-
         # Check if there is an existing user_token. Otherwise it would be redundant to login again
         # Does not create new user or login user if user already logged in
         # (i.e. if there is already a user token in 'default.config')
         with open(self.config_file) as json_file:
             data = json.load(json_file)
+
+        # Get device token by registering as part of an organization
+            if 'device_token' not in data.keys() or data['device_token'] == '':
+                out = self.organization.registerLicense(self.device_name)
+                if 'Token' not in out:
+                    print("Registration error. Check your license key or server URL.")
+                    return
+                self.device_token = out['Token']
+            else:
+                self.device_token = data['device_token']
 
             # Try logging in first. Otherwise create the user and then login
             if ('user_token' not in data.keys() or
