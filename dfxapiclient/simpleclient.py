@@ -435,7 +435,7 @@ class SimpleClient():
         return res
 
     # Clear the values in the "default.config" file
-    def __clear(self):
+    def clear(self):
         with open(self.config_file, mode='w') as f:
             data = {}
             d = json.dumps(data)
