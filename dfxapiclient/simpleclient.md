@@ -140,30 +140,18 @@ You can read more into all the private / internal methods below.
 create_new_measurement(self)
 ```
 
-This method makes a call to the `create` endpoint under `Measurement`, and retrieves the measurement ID from the measurement class.
+This method makes a call to the `create` endpoint under `Measurement`, and retrieves the measurement ID from the measurement class. It then returns the `measurement_id`.
 
 ```python
 try:
     self.measurement.create()
 # Handling if existing token is invalid
 except:
-    self.clear()
     self.__setup()
     self.__record()
     self.measurement.create()
 
 self.measurement_id = self.measurement.measurement_id
-```
-
-It then records the new measurement ID into the `config` file and returns the `measurement_id`.
-
-```python
-with open(self.config_file) as f:   # Reads the content there right now
-    d = json.load(f)
-    d['measurement_id'] = self.measurement_id   # Update measurement ID
-with open(self.config_file, mode='w') as f:     # Dumps information back to file
-    data = json.dumps(d)
-    f.write(data)
 return self.measurement_id
 ```
 
@@ -181,20 +169,17 @@ It first checks for the key parameters by reading from the `.config` file. This 
 with open(self.config_file) as json_file:
     data = json.load(json_file)
     if token == '':
-        token = data['user_token']
-    if measurement_id == '':
-        measurement_id = data['measurement_id']
+        token = data[self.user.email][self.server]['user_token']
 
 if token == '':
     raise ValueError("No user token provided. Please log in.")
-if measurement_id == '':
-    raise ValueError("No measurement ID provided. Please create a measurement.")
+if not measurement_id or measurement_id == '':
+    measurement_id = self.measurement_id
 ```
 
 Then it updates the some variables and creates the headers. It also generates a 10-digit request ID and sets the action ID, which are needed to make a websocket request.
 
 ```python
-self.measurement_id = measurement_id
 self.subscribe_done = False
 self.sub_cycle_complete = False
 
@@ -219,13 +204,15 @@ while True:
     if not self.sub_cycle_complete:
         request = SubscribeResultsRequest()
         paramval = request.Params
-        paramval.ID = self.measurement_id	# Updates measurement ID
+        paramval.ID = measurement_id	# Updates measurement ID
         request.RequestID = requestID
 
         data = f'{actionID:4}{requestID:10}'.encode() + request.SerializeToString()
         done, count = await self.measurement.subscribeResults(data, chunk_num=chunk_no, queue=self.received_data)
     else:
         await asyncio.sleep(self.subscribe_poll)    # For polling
+        if self.measurement_id != measurement_id:
+            measurement_id = self.measurement_id
         continue
 
     self.sub_cycle_complete = True  # Signal that this cycle is complete
@@ -255,7 +242,6 @@ This method adds one payload chunk to a measurement, by passing in the chunk as 
 ```python
 # Update status
 self.addData_done = False
-self.measurement_id = measurement_id
 
 # Extract payload elements
 properties = {
@@ -302,7 +288,7 @@ if self.conn_method == "websocket" or self.conn_method == "ws":
     if self.ws_obj.ws == None:
         await self.ws_obj.connect_ws()
     response = await self.measurement.add_data_ws(
-        self.measurement_id, chunkOrder, action, startTime, endTime, duration, payload, meta)
+        measurement_id, chunkOrder, action, startTime, endTime, duration, payload, meta)
     if response:
         status = response[10:13].decode('utf-8')    # Decode results
         body = response.decode('utf-8')
@@ -311,7 +297,7 @@ if self.conn_method == "websocket" or self.conn_method == "ws":
 # REST
 else:
     response = await self.measurement.add_data_rest(
-        self.measurement_id, chunkOrder, action, startTime, endTime, duration, payload, meta)
+        measurement_id, chunkOrder, action, startTime, endTime, duration, payload, meta)
     status = response.status_code                   # Decode results
     body = response.json()
 ```
@@ -459,42 +445,60 @@ The method first determines if a config file is there, if not, it creates one.
 if not self.config_file:
     self.config_file = "./default.config"
 
-if not os.path.isfile(self.config_file):    # Create empty config json file if not there
+if not os.path.isfile(
+        self.config_file):  # Create empty config json file if not there
     with open(self.config_file, 'w') as f:
-        json.dump({}, f)
+        data = {}
+        data[self.user.email] = {}
+        data[self.user.email][self.server] = {}
+        data[self.user.email][self.server]["user_token"] = self.user_token
+        data[self.user.email][self.server]["device_token"] = self.device_token
+        json.dump(data, f)
+        return
 ```
 
-This method then records all the key DFX API parameters into the `.config` file, in `json` format. The parameters include:
+This method then records all the key DFX API parameters into the `.config` file, in `json` format. Notice that the config file is in the format:
 
-```python
-data = {}
-data["license_key"] = self.license_key
-data["server_url"] = self.server_url
-data["websocket_url"] = self.websocket_url
-data["user_email"] = self.user.email
-data["user_password"] = self.user.password
-data["user_id"] = self.user_id
-data["user_token"] = self.user_token
-data["measurement_id"] = self.measurement_id
+```
+{
+    "user_email1": {
+        "server1": {
+            "user_token": "...",
+            "device_token": "..."
+        },
+        "server2": {
+            ...
+        }
+    },
+    "user_email2": {
+        ...
+    }
+}
 ```
 
 However, if there are existing values in the `.config` file, this method recycles all the values except for the `measurement_id` and `user_id` until the user calls `self.clear`. This prevents the need to register license, create a new user and login each time the client is run. The recycling is done below:
 
 ```python
-with open(self.config_file) as f:
-    # Record previous measurement_id and user_id if there is one already
-    d = json.load(f)
-    if "measurement_id" in d.keys():
-        if d["measurement_id"] != '':
-            data["measurement_id"] = d["measurement_id"]
-            self.measurement_id = d["measurement_id"]
-        if d["user_id"] != '':
-            data["user_id"] = d["user_id"]
-            self.user_id = d["user_id"]
-
-with open(self.config_file, mode='w') as f:
-    d = json.dumps(data)
-    f.write(d)
+with open(self.config_file, 'r') as f:
+    data = json.load(f)
+    
+    if self.user.email in data.keys():
+        if self.server in data[self.user.email].keys():
+            if (data[self.user.email][self.server]["user_token"] 
+            and data[self.user.email][self.server]["device_token"]):
+                return
+            else:
+                data[self.user.email][self.server]["user_token"] = self.user_token
+                data[self.user.email][self.server]["device_token"] = self.device_token
+        else:
+            data[self.user.email][self.server] = {}
+            data[self.user.email][self.server]["user_token"] = self.user_token
+            data[self.user.email][self.server]["device_token"] = self.device_token
+    else:
+        data[self.user.email] = {}
+        data[self.user.email][self.server] = {}
+        data[self.user.email][self.server]["user_token"] = self.user_token
+        data[self.user.email][self.server]["device_token"] = self.device_token
 ```
 
 ### 4. `__setup`
@@ -523,22 +527,23 @@ with open(self.config_file) as json_file:
     data = json.load(json_file)
 
     # Try logging in first. Otherwise create the user and then login
-    if 'user_token' not in data.keys() or data['user_token'] == '':
-        try:        # Try logging in
-            res = self.user.login(self.device_token, self.server_url)
-        except:     # If not successful, then create a new user and then login
-            res = self.user.create(self.device_token, self.server_url)
-            if res == None:
+    if ((self.user.email not in data.keys())
+    or (self.user.email in data.keys() and self.server not in data[self.user.email].keys())):
+        try:
+            res = self.user.login(self.device_token)
+        except:
+            res = self.user.create(self.device_token)
+            if not res:
                 raise Exception("Cannot create user")
             self.user_id = res
-            res = self.user.login(self.device_token, self.server_url)
-            if res == None:
+
+            res = self.user.login(self.device_token)
+            if not res:
                 raise Exception("User login error")
+
         self.user_token = self.user.user_token
-    # If already logged in, just recycle the data
     else:
-        self.user_id = data['user_id']
-        self.user_token = data['user_token']
+        self.user_token = data[self.user.email][self.server]['user_token']
         self.user.user_token = self.user_token
 ```
 
@@ -565,8 +570,14 @@ First, it polls to check if `subscribe_to_results` from the previous measurement
 while not self.sub_cycle_complete:  # Poll until subscribe is complete
     await asyncio.sleep(self.subscribe_poll)        # For polling
 ```
+Once complete, we retrieve the results from the previous measurement.
 
-A new measurement is created, and the subscribe signal is changed and signalled to allow subscribe to continue on the new measurement.
+```python
+res = self.retrieve_results()
+print(res)
+```
+
+A new measurement is then created, and the subscribe signal is changed and signalled to allow subscribe to continue on the new measurement.
 
 ```python
 self.measurement_id = self.create_new_measurement()

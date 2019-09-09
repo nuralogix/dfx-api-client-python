@@ -135,31 +135,36 @@ class SimpleClient():
         if not os.path.isfile(
                 self.config_file):  # Create empty config json file if not there
             with open(self.config_file, 'w') as f:
-                json.dump({}, f)
+                data = {}
+                data[self.user.email] = {}
+                data[self.user.email][self.server] = {}
+                data[self.user.email][self.server]["user_token"] = self.user_token
+                data[self.user.email][self.server]["device_token"] = self.device_token
+                json.dump(data, f)
+                return
 
-        data = {}
-        data["license_key"] = self.license_key
-        data["server_url"] = self.server_url
-        data["websocket_url"] = self.websocket_url
-        data["user_email"] = self.user.email
-        data["user_password"] = self.user.password
-        data["user_id"] = self.user_id
-        data["user_token"] = self.user_token
-        data["measurement_id"] = self.measurement_id
-        data["device_token"] = self.device_token
+        with open(self.config_file, 'r') as f:
+            data = json.load(f)
+            
+            if self.user.email in data.keys():
+                if self.server in data[self.user.email].keys():
+                    if (data[self.user.email][self.server]["user_token"] 
+                    and data[self.user.email][self.server]["device_token"]):
+                        return
+                    else:
+                        data[self.user.email][self.server]["user_token"] = self.user_token
+                        data[self.user.email][self.server]["device_token"] = self.device_token
+                else:
+                    data[self.user.email][self.server] = {}
+                    data[self.user.email][self.server]["user_token"] = self.user_token
+                    data[self.user.email][self.server]["device_token"] = self.device_token
+            else:
+                data[self.user.email] = {}
+                data[self.user.email][self.server] = {}
+                data[self.user.email][self.server]["user_token"] = self.user_token
+                data[self.user.email][self.server]["device_token"] = self.device_token
 
-        with open(self.config_file) as f:
-            # Record previous measurement_id and user_id if there is one already
-            d = json.load(f)
-            if "measurement_id" in d.keys():
-                if d["measurement_id"] != '':
-                    data["measurement_id"] = d["measurement_id"]
-                    self.measurement_id = d["measurement_id"]
-                if d["user_id"] != '':
-                    data["user_id"] = d["user_id"]
-                    self.user_id = d["user_id"]
-
-        with open(self.config_file, mode='w') as f:
+        with open(self.config_file, 'w') as f:
             d = json.dumps(data)
             f.write(d)
 
@@ -173,25 +178,23 @@ class SimpleClient():
             with open(self.config_file, 'w') as f:
                 json.dump({}, f)
 
+        # Get device token by registering as part of an organization
+        out = self.organization.registerLicense(self.device_name)
+        if 'Token' not in out:
+            print("Registration error. Check your license key or server URL.")
+            return
+
+        self.device_token = out['Token']
+
         # Check if there is an existing user_token. Otherwise it would be redundant to login again
         # Does not create new user or login user if user already logged in
         # (i.e. if there is already a user token in 'default.config')
         with open(self.config_file) as json_file:
             data = json.load(json_file)
 
-        # Get device token by registering as part of an organization
-            if 'device_token' not in data.keys() or data['device_token'] == '':
-                out = self.organization.registerLicense(self.device_name)
-                if 'Token' not in out:
-                    print("Registration error. Check your license key or server URL.")
-                    return
-                self.device_token = out['Token']
-            else:
-                self.device_token = data['device_token']
-
             # Try logging in first. Otherwise create the user and then login
-            if ('user_token' not in data.keys() or
-                    data['user_token'] == '') or (data['server_url'] != self.server_url):
+            if ((self.user.email not in data.keys())
+            or (self.user.email in data.keys() and self.server not in data[self.user.email].keys())):
                 try:
                     res = self.user.login(self.device_token)
                 except:
@@ -205,10 +208,8 @@ class SimpleClient():
                         raise Exception("User login error")
 
                 self.user_token = self.user.user_token
-
             else:
-                self.user_id = data['user_id']
-                self.user_token = data['user_token']
+                self.user_token = data[self.user.email][self.server]['user_token']
                 self.user.user_token = self.user_token
 
         if self.user_id != '':
@@ -223,7 +224,6 @@ class SimpleClient():
         try:
             self.measurement.create()
         except:
-            self.clear()
             self.__setup()
             self.__record()
             self.measurement.create()
@@ -233,14 +233,6 @@ class SimpleClient():
         print(
             "Please save the measurement ID or refer to it using \"client.measurement_id\""
         )
-
-        # Update default.config
-        with open(self.config_file) as f:
-            d = json.load(f)
-            d['measurement_id'] = self.measurement_id
-        with open(self.config_file, mode='w') as f:
-            data = json.dumps(d)
-            f.write(data)
         return self.measurement_id
 
     # Subscribe to results to this measurement
@@ -249,16 +241,13 @@ class SimpleClient():
         with open(self.config_file) as json_file:
             data = json.load(json_file)
             if token == '':
-                token = data['user_token']
-            if measurement_id == '':
-                measurement_id = data['measurement_id']
+                token = data[self.user.email][self.server]['user_token']
 
         if token == '':
             raise ValueError("No user token provided. Please log in.")
-        if measurement_id == '':
-            raise ValueError("No measurement ID provided. Please create a measurement.")
+        if not measurement_id or measurement_id == '':
+            measurement_id = self.measurement_id
 
-        self.measurement_id = measurement_id
         self.subscribe_done = False
         self.sub_cycle_complete = False
 
@@ -272,7 +261,7 @@ class SimpleClient():
             if not self.sub_cycle_complete:
                 request = SubscribeResultsRequest()
                 paramval = request.Params
-                paramval.ID = self.measurement_id
+                paramval.ID = measurement_id
                 request.RequestID = requestID
 
                 data = f'{actionID:4}{requestID:10}'.encode(
@@ -281,6 +270,8 @@ class SimpleClient():
                     data, chunk_num=chunk_no, queue=self.received_data)
             else:
                 await asyncio.sleep(self.subscribe_poll)  # For polling
+                if self.measurement_id != measurement_id:
+                    measurement_id = self.measurement_id
                 continue
 
             self.sub_cycle_complete = True
@@ -300,17 +291,14 @@ class SimpleClient():
         with open(self.config_file) as json_file:
             data = json.load(json_file)
             if token == '':
-                token = data['user_token']
-            if measurement_id == '':
-                measurement_id = data['measurement_id']
+                token = data[self.user.email][self.server]['user_token']
 
         if token == '':
             raise ValueError("No user token provided. Please log in.")
-        if measurement_id == '':
-            raise ValueError("No measurement ID provided. Please create a measurement.")
+        if not measurement_id or measurement_id == '':
+            measurement_id = self.measurement_id
 
         self.addData_done = False
-        self.measurement_id = measurement_id
 
         properties = {
             "valid": chunk.valid,
@@ -346,7 +334,7 @@ class SimpleClient():
         if self.conn_method == "websocket" or self.conn_method == "ws":
             if not self.ws_obj.ws:
                 await self.ws_obj.connect_ws()
-            response = await self.measurement.add_data_ws(self.measurement_id,
+            response = await self.measurement.add_data_ws(measurement_id,
                                                           chunkOrder, action, startTime,
                                                           endTime, duration, payload,
                                                           meta)
@@ -357,7 +345,7 @@ class SimpleClient():
                 self.addData_done = True
         # REST
         else:
-            response = await self.measurement.add_data_rest(self.measurement_id,
+            response = await self.measurement.add_data_rest(measurement_id,
                                                             chunkOrder, action,
                                                             startTime, endTime, duration,
                                                             payload, meta)
@@ -403,7 +391,8 @@ class SimpleClient():
         while not self.sub_cycle_complete:  # Poll until subscribe is complete
             await asyncio.sleep(self.subscribe_poll)  # For polling
 
-        # self.retrieve_results()         # Get results from previous measurement
+        res = self.retrieve_results()         # Get results from previous measurement
+        print(res)
         self.measurement_id = self.create_new_measurement()
         self.sub_cycle_complete = False
         await asyncio.sleep(self.subscribe_signal)
@@ -434,20 +423,19 @@ class SimpleClient():
         with open(self.config_file) as json_file:
             data = json.load(json_file)
             if token == '':
-                token = data['user_token']
-            if measurement_id == '':
-                measurement_id = data['measurement_id']
+                token = data[self.user.email][self.server]['user_token']
 
         if token == '':
             raise Exception("No user token provided. Please log in.")
-        if measurement_id == '':
-            raise Exception("No measurement ID provided. Please create a measurement.")
 
-        res = self.measurement.retrieve()
+        if not measurement_id or measurement_id == '':
+            res = self.measurement.retrieve()
+        else:
+            res = self.measurement.retrieve(measurement_id=measurement_id)
         return res
 
     # Clear the values in the "default.config" file
-    def clear(self):
+    def __clear(self):
         with open(self.config_file, mode='w') as f:
             data = {}
             d = json.dumps(data)
@@ -466,8 +454,6 @@ class SimpleClient():
     async def __handle_exit(self):
         if not self.complete:
             if self.addData_done and self.subscribe_done:
-                # self.retrieve_results()
-                # self.measurement.received_data.task_done()
                 if self.conn_method == "websocket" or self.conn_method == "ws":
                     await self.ws_obj.handle_close()
             self.complete = True
