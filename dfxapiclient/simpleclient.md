@@ -19,13 +19,10 @@ The SimpleClient depends on the following packages:
 ```python
 # Python dependancies
 import asyncio
+import copy
 import json
 import os
-import sys
-import time
 import uuid
-import websockets
-from glob import glob
 
 # Other objects from this library
 from .measurements import Measurement
@@ -118,13 +115,7 @@ self.__get_urls()
 self.__measurement_mode()
 ```
 
-This part sets up the `config` file based on whether `config_file` was given. If the file does not exist, it creates a new one. It then calls a method `__record()` to record all the important parameters there.
-
-```python
-self.__record()
-```
-
-Calling the method `__setup()` performs the activities necessary for setting up the client, including register license, create user, and authentication / login.
+Calling the method `__setup()` performs the activities necessary for setting up the client, including register license, create user, and authentication / login. It also handles recycling and saving the values into the configuration file.
 
 ```python
 self.__setup()
@@ -148,7 +139,6 @@ try:
 # Handling if existing token is invalid
 except:
     self.__setup()
-    self.__record()
     self.measurement.create()
 
 self.measurement_id = self.measurement.measurement_id
@@ -395,17 +385,21 @@ __get_urls(self)
 This method determines the REST, websocket, and gRPC urls based on the server the user selects during initialization.
 
 ```python
-if self.server == "qa":
-    self.server_url = ...
-    self.websocket_url = ...
-
-elif self.server == "dev":
-    self.server_url = ...
-    self.websocket_url = ...
-
-elif self.server == "demo":
+self.__valid_servers = {
+    "qa": {
+        "server_url": "...",
+        "websocket_url": "..."
+    },
+    "dev": {
+        ...
+    },
     ...
-    ...
+try:
+    self.server_url = self.__valid_servers[self.server]["server_url"]
+    self.websocket_url = self.__valid_servers[self.server]["websocket_url"]
+except:
+    raise ValueError("Invalid server ID given")
+
 ```
 
 ### 2. `__measurement_mode`
@@ -417,15 +411,15 @@ __measurement_mode(self)
 This method determines the maximum length of a measurement for each measurement mode given, and calculates the maximum number of chunks per measurement based on the length per chunk.
 
 ```python
-if self.measurement_mode == 'DISCRETE':
-    max_len = 120
-elif self.measurement_mode == 'BATCH':
-    max_len = 1200
-elif self.measurement_mode == 'VIDEO':
-    max_len = 1200
-elif self.measurement_mode == 'STREAMING':
-    max_len = 1200
-else:
+self.__measurement_modes = {
+    "DISCRETE": 120,
+    "BATCH": 1200,
+    "VIDEO": 1200,
+    "STREAMING": 1200
+}
+try:
+    max_len = self.__measurement_modes[self.measurement_mode]
+except:
     raise ValueError("Invalid measurement mode given")
 
 self.num_chunks = int(self.video_length / self.chunk_length)
@@ -436,70 +430,100 @@ self.max_chunks = int(max_len / self.chunk_length)
 ### 3. `__record`
 
 ```python
-__record(self)
+__record(self, data:dict={})
 ```
 
-The method first determines if a config file is there, if not, it creates one.
+The method first determines if a config file is there, if not, it creates an empty one.
 
 ```python
 if not self.config_file:
     self.config_file = "./default.config"
 
 if not os.path.isfile(
-        self.config_file):  # Create empty config json file if not there
+        self.config_file):  
     with open(self.config_file, 'w') as f:
-        data = {}
-        data[self.user.email] = {}
-        data[self.user.email][self.server] = {}
-        data[self.user.email][self.server]["user_token"] = self.user_token
-        data[self.user.email][self.server]["device_token"] = self.device_token
-        json.dump(data, f)
-        return
+        d = json.dumps({})
+        f.write(d)
 ```
 
 This method then records all the key DFX API parameters into the `.config` file, in `json` format. Notice that the config file is in the format:
 
 ```
 {
-    "user_email1": {
-        "server1": {
-            "user_token": "...",
-            "device_token": "..."
-        },
-        "server2": {
+    "server1": {
+        "license_key1": {
+            "device_token": "...",
+            "user1": {
+                "user_token": "..."
+            },
+            "user2": {
+                "user_token": "..."
+            },
             ...
-        }
-    },
-    "user_email2": {
+        },
+        "license_key2": {
+            ...
+        },
         ...
-    }
+    },
+    "server2": {
+        ...
+    },
+    ...
 }
 ```
 
-However, if there are existing values in the `.config` file, this method recycles all the values except for the `measurement_id` and `user_id` until the user calls `self.clear`. This prevents the need to register license, create a new user and login each time the client is run. The recycling is done below:
+This structure ensures that for different servers, there can exist multiple licenses (`license_key`), which contains one `device_token` each and multiple users (identified by `user_email`), each with its own `user_token`. 
+
+For this method, if the `data` parameter is not passed in, the new values are directly overwritten into the config file. If `data` is passed in, it creates a copy. The handling for recycling previous values are now implemented in `__setup()` below. 
 
 ```python
-with open(self.config_file, 'r') as f:
-    data = json.load(f)
-    
-    if self.user.email in data.keys():
-        if self.server in data[self.user.email].keys():
-            if (data[self.user.email][self.server]["user_token"] 
-            and data[self.user.email][self.server]["device_token"]):
-                return
-            else:
-                data[self.user.email][self.server]["user_token"] = self.user_token
-                data[self.user.email][self.server]["device_token"] = self.device_token
-        else:
-            data[self.user.email][self.server] = {}
-            data[self.user.email][self.server]["user_token"] = self.user_token
-            data[self.user.email][self.server]["device_token"] = self.device_token
-    else:
-        data[self.user.email] = {}
-        data[self.user.email][self.server] = {}
-        data[self.user.email][self.server]["user_token"] = self.user_token
-        data[self.user.email][self.server]["device_token"] = self.device_token
+if not data or data == {}:
+    with open(self.config_file, 'r') as f:
+        data = json.load(f)
+        data[self.server] = {}
+        if self.license_key != '':
+            data[self.server][self.license_key] = {}
+            if self.device_token != '':
+                data[self.server][self.license_key]["device_token"] = self.device_token
+            if self.user.email != '':
+                data[self.server][self.license_key][self.user.email] = {}
+                if self.user_token != '':
+                    data[self.server][self.license_key][self.user.email]["user_token"] = self.user_token
+else:
+    data = data
 ```
+
+The next part cleans up the data dictionary, by clearing all attributes with an empty value or invalid attributes. 
+
+```python
+copied = copy.deepcopy(data)
+for server in copied.keys():
+    if server not in self.__valid_servers.keys():
+        data.pop(server, None)
+
+    for key in copied[server].keys():
+        data[server].pop('', None)
+        data[server].pop(' ', None)
+        if copied[server][key] == {}:
+            data[server].pop(key, None)
+
+        for k in copied[server][key].keys():
+            if k != "device_token":
+                data[server][key].pop('', None)
+                data[server][key].pop(' ', None)
+            if copied[server][key][k] == {} or copied[server][key][k] == "":
+                data[server][key].pop(k, None)
+```
+
+Finally, the data dictionary is written back into the config file.
+
+```python
+with open(self.config_file, 'w') as f:
+    d = json.dumps(data)
+    f.write(d)
+```
+
 
 ### 4. `__setup`
 
@@ -507,45 +531,96 @@ with open(self.config_file, 'r') as f:
 __setup(self)
 ```
 
-This method handles the registration and authentication for the DFX API. To call any DFX API method, an API token is required, and this method helps retrieve such a token.
+This method handles the registration and authentication for the DFX API, as well as recycling and recording the values in the `.config` file. To call any DFX API method, an API token is required, and this method helps retrieve such a token.
 
-It first registers the device by calling the endpoint `organization.registerLicense`.
+The method first determines if a config file is there, if not, it creates an empty one.
 
 ```python
-out = self.organization.registerLicense(self.device_name)
-if 'Token' not in out:
-    print("Registration error. Check your license key or server URL.")
-    return
+if not self.config_file:
+    self.config_file = "./default.config"
 
-self.device_token = out['Token']
+if not os.path.isfile(
+        self.config_file):
+    with open(self.config_file, 'w') as f:
+        json.dump({}, f)
 ```
 
-Then it opens the `.config` file and goes through some variables. If no `user_token` exists, then it tries logging in. If unsuccessful, then it creates a new user and then logs in. Otherwise, if a token is already there, it just recycles the parameters.
+Then it opens the `.config` file and goes through the parameters. First, it records the `server` ID, `license_key`, and `user_email` if they don't exist.
 
 ```python
-with open(self.config_file) as json_file:
-    data = json.load(json_file)
+if (self.server not in data.keys() or data[self.server] == {}):
+    data[self.server] = {}
 
-    # Try logging in first. Otherwise create the user and then login
-    if ((self.user.email not in data.keys())
-    or (self.user.email in data.keys() and self.server not in data[self.user.email].keys())):
-        try:
-            res = self.user.login(self.device_token)
-        except:
-            res = self.user.create(self.device_token)
-            if not res:
-                raise Exception("Cannot create user")
-            self.user_id = res
+if (self.license_key not in data[self.server].keys() 
+or data[self.server][self.license_key] == {}):
+    data[self.server][self.license_key] = {}
 
-            res = self.user.login(self.device_token)
-            if not res:
-                raise Exception("User login error")
+if self.user.email not in data[self.server][self.license_key].keys():
+    data[self.server][self.license_key][self.user.email] = {}
+```
 
-        self.user_token = self.user.user_token
+Next, for the device token, if a `device_token` doesn't exist for this server and license, it calls the `Organization.registerLicense()` endpoint to obtain a device token. On the other hand, if the device token already exists, it takes the existing token to prevent redundantly registering the same license.
+
+Note that whenever an error occurs, it saves the current state into the config file by calling `self.__record()`, to prevent redundant operations later.
+
+```python
+if ("device_token" not in data[self.server][self.license_key].keys()
+or data[self.server][self.license_key]["device_token"] == ''):
+    out = self.organization.registerLicense(self.device_name)
+    if 'Token' not in out:
+        self.__record(data=data)
+        raise Exception("Registration error. Check your license key or server URL.")
+
+    self.device_token = out['Token']
+    if self.device_token and self.device_token != '':
+        data[self.server][self.license_key]["device_token"] = self.device_token
     else:
-        self.user_token = data[self.user.email][self.server]['user_token']
-        self.user.user_token = self.user_token
+        self.__record(data=data)
+        raise Exception("Registration error. Check your license key or server URL.")
+
+elif (self.device_token == '' and
+data[self.server][self.license_key]["device_token"] != ''):
+    self.device_token = data[self.server][self.license_key]["device_token"]
 ```
+
+Next, for the user token, if a `user_token` does not exist for the current user on this license and server, it tries to log in (`User.login()`) the user first using the device token. If cannot be logged in, it needs to create a new user (`User.create()`) before logging in. The user information and credentials are already handled in the `User` class, so it only needs to pass in the `device_token`.
+
+This setup prevents the creation of many new users under the same email. 
+
+```python
+if ("user_token" not in data[self.server][self.license_key][self.user.email].keys()
+or data[self.server][self.license_key][self.user.email]["user_token"] == ''):
+    try:
+        res = self.user.login(self.device_token)
+    except:
+        res = self.user.create(self.device_token)
+        if not res:
+            self.__record(data=data)
+            raise Exception("Cannot create user. Check your license permissions.")
+        self.user_id = res
+
+        res = self.user.login(self.device_token)
+        if not res:
+            self.__record(data=data)
+            raise Exception("User login error")
+    
+    self.user_token = self.user.user_token
+
+    if self.user_token != '':
+        data[self.server][self.license_key][self.user.email]["user_token"] = self.user_token
+else:
+    self.user_token = data[self.server][self.license_key][self.user.email]["user_token"]
+    self.user.user_token = self.user_token
+```
+
+Finally, we record the complete data into the config file.
+
+```python
+with open(self.config_file, 'w') as f:
+    d = json.dumps(data)
+    f.write(d)
+```
+
 
 ### 5. `__handle_ws_timeout`
 

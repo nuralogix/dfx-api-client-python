@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import os
 import uuid
@@ -50,6 +51,8 @@ class SimpleClient():
         self.measurement_id = ''
         self.received_data = asyncio.Queue(30)  # Queue for storing results
 
+        self.__valid_servers = {}
+        self.__measurement_modes = {}
         self.__get_urls()
         self.__measurement_mode()
 
@@ -66,7 +69,6 @@ class SimpleClient():
         self.subscribe_signal = 0.5
 
         self.__setup()  # Register license, create user and login user
-        self.__record()  # Record all values and dump into 'default.config'
 
         self.ws_obj = WebsocketHandler(self.user_token, self.websocket_url)
 
@@ -81,88 +83,101 @@ class SimpleClient():
 
     # Internal: Get server urls given the server name
     def __get_urls(self):
-        # North America
-        if self.server == "qa":
-            self.server_url = "https://qa.api.deepaffex.ai:9443"
-            self.websocket_url = "wss://qa.api.deepaffex.ai:9080"
-
-        elif self.server == "dev":
-            self.server_url = "https://dev.api.deepaffex.ai:9443"
-            self.websocket_url = "wss://dev.api.deepaffex.ai:9080"
-
-        elif self.server == "demo":
-            self.server_url = "https://demo.api.deepaffex.ai:9443"
-            self.websocket_url = "wss://demo.api.deepaffex.ai:9080"
-
-        elif self.server == "prod":
-            self.server_url = "https://api2.api.deepaffex.ai:9443"
-            self.websocket_url = "wss://api2.api.deepaffex.ai:9080"
-
-        # China
-        elif self.server == "prod-cn":
-            self.server_url = "https://api.deepaffex.cn:9443"
-            self.websocket_url = "wss://api.deepaffex.cn:9080"
-
-        elif self.server == "demo-cn":
-            self.server_url = "https://demo.api.deepaffex.cn:9443"
-            self.websocket_url = "wss://demo.api.deepaffex.cn:9080"
-
-        else:
-            raise ValueError("Invalid server")
+        self.__valid_servers = {
+            "qa": {
+                "server_url": "https://qa.api.deepaffex.ai:9443",
+                "websocket_url": "wss://qa.api.deepaffex.ai:9080"
+            },
+            "dev": {
+                "server_url": "https://dev.api.deepaffex.ai:9443",
+                "websocket_url": "wss://dev.api.deepaffex.ai:9080"
+            },
+            "demo": {
+                "server_url": "https://demo.api.deepaffex.ai:9443",
+                "websocket_url": "wss://demo.api.deepaffex.ai:9080"
+            },
+            "prod": {
+                "server_url": "https://api2.api.deepaffex.ai:9443",
+                "websocket_url": "wss://api2.api.deepaffex.ai:9080"
+            },
+            "prod-cn": {
+                "server_url": "https://api.deepaffex.cn:9443",
+                "websocket_url": "wss://api.deepaffex.cn:9080"
+            },
+            "demo-cn": {
+                "server_url": "https://demo.api.deepaffex.cn:9443",
+                "websocket_url": "wss://demo.api.deepaffex.cn:9080"
+            }                                                            
+        }
+        try:
+            self.server_url = self.__valid_servers[self.server]["server_url"]
+            self.websocket_url = self.__valid_servers[self.server]["websocket_url"]
+        except:
+            raise ValueError("Invalid server ID given")
 
     # Internal: Setup measurement mode
     def __measurement_mode(self):
-        if self.measurement_mode == 'DISCRETE':
-            max_len = 120
-        elif self.measurement_mode == 'BATCH':
-            max_len = 1200
-        elif self.measurement_mode == 'VIDEO':
-            max_len = 1200
-        elif self.measurement_mode == 'STREAMING':
-            max_len = 1200
-        else:
+        self.__measurement_modes = {
+            "DISCRETE": 120,
+            "BATCH": 1200,
+            "VIDEO": 1200,
+            "STREAMING": 1200
+        }
+        try:
+            max_len = self.__measurement_modes[self.measurement_mode]
+        except:
             raise ValueError("Invalid measurement mode given")
 
         self.num_chunks = int(self.video_length / self.chunk_length)
         self.max_chunks = int(max_len / self.chunk_length)
 
     # Internal: Record and cache all important parameters
-    def __record(self):
+    def __record(self, data={}):
         # Create a config file
         if not self.config_file:
             self.config_file = "./default.config"
 
+        # Create empty config json file if not there
         if not os.path.isfile(
-                self.config_file):  # Create empty config json file if not there
+                self.config_file):  
             with open(self.config_file, 'w') as f:
-                data = {}
-                data[self.user.email] = {}
-                data[self.user.email][self.server] = {}
-                data[self.user.email][self.server]["user_token"] = self.user_token
-                data[self.user.email][self.server]["device_token"] = self.device_token
-                json.dump(data, f)
-                return
+                d = json.dumps({})
+                f.write(d)
 
-        with open(self.config_file, 'r') as f:
-            data = json.load(f)
-            
-            if self.user.email in data.keys():
-                if self.server in data[self.user.email].keys():
-                    if (data[self.user.email][self.server]["user_token"] 
-                    and data[self.user.email][self.server]["device_token"]):
-                        return
-                    else:
-                        data[self.user.email][self.server]["user_token"] = self.user_token
-                        data[self.user.email][self.server]["device_token"] = self.device_token
-                else:
-                    data[self.user.email][self.server] = {}
-                    data[self.user.email][self.server]["user_token"] = self.user_token
-                    data[self.user.email][self.server]["device_token"] = self.device_token
-            else:
-                data[self.user.email] = {}
-                data[self.user.email][self.server] = {}
-                data[self.user.email][self.server]["user_token"] = self.user_token
-                data[self.user.email][self.server]["device_token"] = self.device_token
+        # Overwrite values with current values
+        if not data or data == {}:
+            with open(self.config_file, 'r') as f:
+                data = json.load(f)
+                data[self.server] = {}
+                if self.license_key != '':
+                    data[self.server][self.license_key] = {}
+                    if self.device_token != '':
+                        data[self.server][self.license_key]["device_token"] = self.device_token
+                    if self.user.email != '':
+                        data[self.server][self.license_key][self.user.email] = {}
+                        if self.user_token != '':
+                            data[self.server][self.license_key][self.user.email]["user_token"] = self.user_token
+        else:
+            data = data
+
+        # Clean up the remaining values (i.e. get rid of it if it's empty)
+        copied = copy.deepcopy(data)
+        for server in copied.keys():
+            if server not in self.__valid_servers.keys():
+                data.pop(server, None)
+
+            for key in copied[server].keys():
+                data[server].pop('', None)
+                data[server].pop(' ', None)
+                if copied[server][key] == {}:
+                    data[server].pop(key, None)
+
+                for k in copied[server][key].keys():
+                    if k != "device_token":
+                        data[server][key].pop('', None)
+                        data[server][key].pop(' ', None)
+                    if copied[server][key][k] == {} or copied[server][key][k] == "":
+                        data[server][key].pop(k, None)
 
         with open(self.config_file, 'w') as f:
             d = json.dumps(data)
@@ -178,43 +193,69 @@ class SimpleClient():
             with open(self.config_file, 'w') as f:
                 json.dump({}, f)
 
-        # Get device token by registering as part of an organization
-        out = self.organization.registerLicense(self.device_name)
-        if 'Token' not in out:
-            print("Registration error. Check your license key or server URL.")
-            return
-
-        self.device_token = out['Token']
-
-        # Check if there is an existing user_token. Otherwise it would be redundant to login again
-        # Does not create new user or login user if user already logged in
-        # (i.e. if there is already a user token in 'default.config')
-        with open(self.config_file) as json_file:
+        # Recycle and replace values in the config file
+        with open(self.config_file, 'r') as json_file:
             data = json.load(json_file)
 
-            # Try logging in first. Otherwise create the user and then login
-            if ((self.user.email not in data.keys())
-            or (self.user.email in data.keys() and self.server not in data[self.user.email].keys())):
+            # Server
+            if (self.server not in data.keys() or data[self.server] == {}):
+                data[self.server] = {}
+
+            # License key
+            if (self.license_key not in data[self.server].keys() 
+            or data[self.server][self.license_key] == {}):
+                data[self.server][self.license_key] = {}
+
+            # User email
+            if self.user.email not in data[self.server][self.license_key].keys():
+                data[self.server][self.license_key][self.user.email] = {}
+
+            # Device token
+            if ("device_token" not in data[self.server][self.license_key].keys()
+            or data[self.server][self.license_key]["device_token"] == ''):
+                out = self.organization.registerLicense(self.device_name)
+                if 'Token' not in out:
+                    self.__record(data=data)    # Save current state
+                    raise Exception("Registration error. Check your license key or server URL.")
+
+                self.device_token = out['Token']
+                if self.device_token and self.device_token != '':
+                    data[self.server][self.license_key]["device_token"] = self.device_token
+                else:
+                    self.__record(data=data)
+                    raise Exception("Registration error. Check your license key or server URL.")
+
+            elif (self.device_token == '' and
+            data[self.server][self.license_key]["device_token"] != ''):
+                self.device_token = data[self.server][self.license_key]["device_token"]
+
+            # User token
+            if ("user_token" not in data[self.server][self.license_key][self.user.email].keys()
+            or data[self.server][self.license_key][self.user.email]["user_token"] == ''):
                 try:
                     res = self.user.login(self.device_token)
                 except:
                     res = self.user.create(self.device_token)
                     if not res:
-                        raise Exception("Cannot create user")
+                        self.__record(data=data)
+                        raise Exception("Cannot create user. Check your license permissions.")
                     self.user_id = res
 
                     res = self.user.login(self.device_token)
                     if not res:
+                        self.__record(data=data)
                         raise Exception("User login error")
-
+                
                 self.user_token = self.user.user_token
+
+                if self.user_token != '':
+                    data[self.server][self.license_key][self.user.email]["user_token"] = self.user_token
             else:
-                self.user_token = data[self.user.email][self.server]['user_token']
+                self.user_token = data[self.server][self.license_key][self.user.email]["user_token"]
                 self.user.user_token = self.user_token
 
-        if self.user_id != '':
-            print("\nUser ID:", self.user_id)
-            print("Please save the user ID or refer to it using \"client.user_id\"")
+        self.__record()
+
         print("\nUser token:", self.user_token)
         print("Please save the user token or refer to it using \"client.user_token\"")
         return
@@ -225,7 +266,6 @@ class SimpleClient():
             self.measurement.create()
         except:
             self.__setup()
-            self.__record()
             self.measurement.create()
 
         self.measurement_id = self.measurement.measurement_id
@@ -241,7 +281,7 @@ class SimpleClient():
         with open(self.config_file) as json_file:
             data = json.load(json_file)
             if token == '':
-                token = data[self.user.email][self.server]['user_token']
+                token = data[self.server][self.license_key][self.user.email]["user_token"]
 
         if token == '':
             raise ValueError("No user token provided. Please log in.")
@@ -291,7 +331,7 @@ class SimpleClient():
         with open(self.config_file) as json_file:
             data = json.load(json_file)
             if token == '':
-                token = data[self.user.email][self.server]['user_token']
+                token = data[self.server][self.license_key][self.user.email]["user_token"]
 
         if token == '':
             raise ValueError("No user token provided. Please log in.")
@@ -423,7 +463,7 @@ class SimpleClient():
         with open(self.config_file) as json_file:
             data = json.load(json_file)
             if token == '':
-                token = data[self.user.email][self.server]['user_token']
+                token = data[self.server][self.license_key][self.user.email]["user_token"]
 
         if token == '':
             raise Exception("No user token provided. Please log in.")
