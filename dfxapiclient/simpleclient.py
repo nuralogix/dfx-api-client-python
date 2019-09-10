@@ -216,14 +216,11 @@ class SimpleClient():
                 out = self.organization.registerLicense(self.device_name)
                 if 'Token' not in out:
                     self.__record(data=data)    # Save current state
-                    raise Exception("Registration error. Check your license key or server URL.")
+                    raise Exception("Registration error. Make sure your license key is valid for the selected server.")
+                    return
 
                 self.device_token = out['Token']
-                if self.device_token and self.device_token != '':
-                    data[self.server][self.license_key]["device_token"] = self.device_token
-                else:
-                    self.__record(data=data)
-                    raise Exception("Registration error. Check your license key or server URL.")
+                data[self.server][self.license_key]["device_token"] = self.device_token
 
             elif (self.device_token == '' and
             data[self.server][self.license_key]["device_token"] != ''):
@@ -232,29 +229,30 @@ class SimpleClient():
             # User token
             if ("user_token" not in data[self.server][self.license_key][self.user.email].keys()
             or data[self.server][self.license_key][self.user.email]["user_token"] == ''):
-                try:
-                    res = self.user.login(self.device_token)
-                except:
+                res = self.user.login(self.device_token)
+
+                if res == "INVALID_USER":
                     res = self.user.create(self.device_token)
-                    if not res:
+                    if res == 'INTERNAL_ERROR':
                         self.__record(data=data)
-                        raise Exception("Cannot create user. Check your license permissions.")
+                        raise Exception("Cannot create new user. Check your license permissions.")
+                        return
                     self.user_id = res
-
                     res = self.user.login(self.device_token)
-                    if not res:
-                        self.__record(data=data)
-                        raise Exception("User login error")
-                
-                self.user_token = self.user.user_token
 
+                elif res == "INVALID_PASSWORD":
+                    self.__record(data=data)
+                    raise Exception("Incorrect login password.")
+                    return
+
+                self.user_token = self.user.user_token
                 if self.user_token != '':
                     data[self.server][self.license_key][self.user.email]["user_token"] = self.user_token
             else:
                 self.user_token = data[self.server][self.license_key][self.user.email]["user_token"]
                 self.user.user_token = self.user_token
 
-        self.__record()
+        self.__record(data=data)
 
         print("\nUser token:", self.user_token)
         print("Please save the user token or refer to it using \"client.user_token\"")

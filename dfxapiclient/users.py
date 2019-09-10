@@ -74,8 +74,7 @@ class User:
         r = requests.post(uri, data=values, headers=header)
         res = r.json()
         if 'ID' not in res:
-            print(res)
-            return
+            return res['Code']
 
         self.user_id = res['ID']
         return self.user_id
@@ -98,7 +97,7 @@ class User:
         res = r.json()
 
         if 'Token' not in res:
-            raise Exception('User not found')
+            return res['Code']
 
         self.user_token = res['Token']
         self.__update_token(self.user_token)

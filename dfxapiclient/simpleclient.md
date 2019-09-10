@@ -569,14 +569,11 @@ or data[self.server][self.license_key]["device_token"] == ''):
     out = self.organization.registerLicense(self.device_name)
     if 'Token' not in out:
         self.__record(data=data)
-        raise Exception("Registration error. Check your license key or server URL.")
+        raise Exception("Registration error. Make sure your license key is valid for the selected server.")
+        return
 
     self.device_token = out['Token']
-    if self.device_token and self.device_token != '':
-        data[self.server][self.license_key]["device_token"] = self.device_token
-    else:
-        self.__record(data=data)
-        raise Exception("Registration error. Check your license key or server URL.")
+    data[self.server][self.license_key]["device_token"] = self.device_token
 
 elif (self.device_token == '' and
 data[self.server][self.license_key]["device_token"] != ''):
@@ -590,19 +587,21 @@ This setup prevents the creation of many new users under the same email.
 ```python
 if ("user_token" not in data[self.server][self.license_key][self.user.email].keys()
 or data[self.server][self.license_key][self.user.email]["user_token"] == ''):
-    try:
-        res = self.user.login(self.device_token)
-    except:
-        res = self.user.create(self.device_token)
-        if not res:
-            self.__record(data=data)
-            raise Exception("Cannot create user. Check your license permissions.")
-        self.user_id = res
+    res = self.user.login(self.device_token)
 
-        res = self.user.login(self.device_token)
-        if not res:
+    if res == "INVALID_USER":
+        res = self.user.create(self.device_token)
+        if res == 'INTERNAL_ERROR':
             self.__record(data=data)
-            raise Exception("User login error")
+            raise Exception("Cannot create new user. Check your license permissions.")
+            return
+        self.user_id = res
+        res = self.user.login(self.device_token)
+
+    elif res == "INVALID_PASSWORD":
+        self.__record(data=data)
+        raise Exception("Incorrect login password.")
+        return
     
     self.user_token = self.user.user_token
 
@@ -616,9 +615,7 @@ else:
 Finally, we record the complete data into the config file.
 
 ```python
-with open(self.config_file, 'w') as f:
-    d = json.dumps(data)
-    f.write(d)
+self.__record(data=data)
 ```
 
 

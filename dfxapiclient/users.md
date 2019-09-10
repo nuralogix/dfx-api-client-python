@@ -58,8 +58,7 @@ uri = self.url + '/users'
 r = requests.post(uri, data=values, headers=header)
 res = r.json()
 if 'ID' not in res:
-    print(res)
-    raise Exception('Cannot create user')
+    return res['Code']
 
 self.user_id = res['ID']
 return self.user_id
@@ -91,7 +90,7 @@ r = requests.post(uri, data=values, headers=header)
 res = r.json()
 
 if 'Token' not in res:
-    raise Exception('User not found')
+    return res['Code']
 
 self.user_token = res['Token']
 return self.user_token
