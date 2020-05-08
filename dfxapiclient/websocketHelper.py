@@ -17,8 +17,7 @@ class WebsocketHandler():
         self.addDataStats = []
         self.subscribeStats = []
         self.chunks = []
-        self.unknown = {
-        }  # For storing messages not coming from a known websocket sender
+        self.unknown = {}  # For storing messages not coming from a known websocket sender
 
     async def connect_ws(self):
         self.ws = await self.handle_connect()

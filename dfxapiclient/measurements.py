@@ -9,15 +9,7 @@ from .measurements_pb2 import DataRequest
 
 # 5
 class Measurement:
-    def __init__(self,
-                 study_id,
-                 rest_url,
-                 ws_obj,
-                 num_chunks,
-                 max_chunks,
-                 mode='DISCRETE',
-                 token='',
-                 usrprofileID=''):
+    def __init__(self, study_id, rest_url, ws_obj, num_chunks, max_chunks, mode='DISCRETE', token='', usrprofileID=''):
         self.study_id = study_id
         self.profile_id = usrprofileID
         self.measurement_id = ''
@@ -48,12 +40,7 @@ class Measurement:
     # 504
     def create(self):
         # [ 504, "1.0", "POST", "create", "/measurements" ]
-        values = {
-            "StudyID": self.study_id,
-            "Resolution": 100,
-            "UserProfileID": self.profile_id,
-            "Mode": self.mode
-        }
+        values = {"StudyID": self.study_id, "Resolution": 100, "UserProfileID": self.profile_id, "Mode": self.mode}
         values = json.dumps(values)
 
         uri = self.url + '/measurements'
@@ -68,15 +55,7 @@ class Measurement:
 
     # 506
     # REST
-    async def add_data_rest(self,
-                            measurement_id,
-                            chunkOrder,
-                            action,
-                            startTime,
-                            endTime,
-                            duration,
-                            payload,
-                            meta={}):
+    async def add_data_rest(self, measurement_id, chunkOrder, action, startTime, endTime, duration, payload, meta={}):
         # [ 506, "1.0", "POST", "data", "/measurements/:ID/data" ]
         uri = self.url + "/measurements/" + measurement_id + "/data"
 
@@ -99,15 +78,7 @@ class Measurement:
         return result
 
     # Websocket
-    async def add_data_ws(self,
-                          measurement_id,
-                          chunkOrder,
-                          action,
-                          startTime,
-                          endTime,
-                          duration,
-                          payload,
-                          meta={}):
+    async def add_data_ws(self, measurement_id, chunkOrder, action, startTime, endTime, duration, payload, meta={}):
         data = DataRequest()
         paramval = data.Params
         paramval.ID = measurement_id
@@ -137,8 +108,7 @@ class Measurement:
         while True:
             if not self.end:
                 try:
-                    await asyncio.wait_for(self.ws_obj.handle_recieve(),
-                                           timeout=self.recv_timeout)
+                    await asyncio.wait_for(self.ws_obj.handle_recieve(), timeout=self.recv_timeout)
                 except Exception:
                     if self.end:
                         break
@@ -185,9 +155,7 @@ class Measurement:
                     self.ws_obj.subscribeStats = self.ws_obj.subscribeStats[1:]
                     statusCode = response[10:13].decode('utf-8')
                     if statusCode != '200':
-                        raise ValueError(
-                            f"Status Code{statusCode}: Subscribe failed. (Check measurement ID)"
-                        )
+                        raise ValueError(f"Status Code{statusCode}: Subscribe failed. (Check measurement ID)")
                 elif self.ws_obj.chunks:
                     counter += 1
                     response = self.ws_obj.chunks[0]
@@ -197,9 +165,7 @@ class Measurement:
                         await queue.put(response[13:])
 
                     if len(response[13:]) < 1000:
-                        raise ValueError(
-                            f"Status Code{response[13:]}: Subscribe failed. (Check measurement ID)"
-                        )
+                        raise ValueError(f"Status Code{response[13:]}: Subscribe failed. (Check measurement ID)")
             else:
                 done = True
                 return done, counter

@@ -56,8 +56,7 @@ class SimpleClient():
         self.__get_urls()
         self.__measurement_mode()
 
-        self.user = User(self.server_url, firstname, lastname, email, password, gender,
-                         dateofbirth, height, weight)
+        self.user = User(self.server_url, firstname, lastname, email, password, gender, dateofbirth, height, weight)
         self.organization = Organization(license_key, self.server_url)
 
         self.addData_done = True  # Can only close websocket after all tasks are done
@@ -117,12 +116,7 @@ class SimpleClient():
 
     # Internal: Setup measurement mode
     def __measurement_mode(self):
-        self.__measurement_modes = {
-            "DISCRETE": 120,
-            "BATCH": 1200,
-            "VIDEO": 1200,
-            "STREAMING": 1200
-        }
+        self.__measurement_modes = {"DISCRETE": 120, "BATCH": 1200, "VIDEO": 1200, "STREAMING": 1200}
         try:
             max_len = self.__measurement_modes[self.measurement_mode]
         except KeyError:
@@ -187,8 +181,7 @@ class SimpleClient():
         if not self.config_file:
             self.config_file = "./default.config"
 
-        if not os.path.isfile(
-                self.config_file):  # Create empty config json file if not there
+        if not os.path.isfile(self.config_file):  # Create empty config json file if not there
             with open(self.config_file, 'w') as f:
                 json.dump({}, f)
 
@@ -201,8 +194,7 @@ class SimpleClient():
                 data[self.server] = {}
 
             # License key
-            if (self.license_key not in data[self.server].keys()
-            or data[self.server][self.license_key] == {}):
+            if (self.license_key not in data[self.server].keys() or data[self.server][self.license_key] == {}):
                 data[self.server][self.license_key] = {}
 
             # User email
@@ -211,22 +203,22 @@ class SimpleClient():
 
             # Device token
             if ("device_token" not in data[self.server][self.license_key].keys()
-            or data[self.server][self.license_key]["device_token"] == ''):
+                    or data[self.server][self.license_key]["device_token"] == ''):
                 out = self.organization.registerLicense(self.device_name)
                 if 'Token' not in out:
-                    self.__record(data=data)    # Save current state
-                    raise PermissionError("Registration error. Make sure your license key is valid for the selected server.")
+                    self.__record(data=data)  # Save current state
+                    raise PermissionError(
+                        "Registration error. Make sure your license key is valid for the selected server.")
 
                 self.device_token = out['Token']
                 data[self.server][self.license_key]["device_token"] = self.device_token
 
-            elif (self.device_token == '' and
-            data[self.server][self.license_key]["device_token"] != ''):
+            elif (self.device_token == '' and data[self.server][self.license_key]["device_token"] != ''):
                 self.device_token = data[self.server][self.license_key]["device_token"]
 
             # User token
             if ("user_token" not in data[self.server][self.license_key][self.user.email].keys()
-            or data[self.server][self.license_key][self.user.email]["user_token"] == ''):
+                    or data[self.server][self.license_key][self.user.email]["user_token"] == ''):
                 res = self.user.login(self.device_token)
 
                 if res == "INVALID_USER":
@@ -291,10 +283,10 @@ class SimpleClient():
                 paramval.ID = measurement_id
                 request.RequestID = requestID
 
-                data = f'{actionID:4}{requestID:10}'.encode(
-                ) + request.SerializeToString()
-                done, count = await self.measurement.subscribeResults(
-                    data, chunk_num=chunk_no, queue=self.received_data)
+                data = f'{actionID:4}{requestID:10}'.encode() + request.SerializeToString()
+                done, count = await self.measurement.subscribeResults(data,
+                                                                      chunk_num=chunk_no,
+                                                                      queue=self.received_data)
             else:
                 await asyncio.sleep(self.subscribe_poll)  # For polling
                 if self.measurement_id != measurement_id:
@@ -361,10 +353,8 @@ class SimpleClient():
         if self.conn_method == "websocket" or self.conn_method == "ws":
             if not self.ws_obj.ws:
                 await self.ws_obj.connect_ws()
-            response = await self.measurement.add_data_ws(measurement_id,
-                                                          chunkOrder, action, startTime,
-                                                          endTime, duration, payload,
-                                                          meta)
+            response = await self.measurement.add_data_ws(measurement_id, chunkOrder, action, startTime, endTime,
+                                                          duration, payload, meta)
             if response:
                 status = int(response[10:13].decode('utf-8'))
                 body = response.decode('utf-8')
@@ -372,10 +362,8 @@ class SimpleClient():
                 self.addData_done = True
         # REST
         else:
-            response = await self.measurement.add_data_rest(measurement_id,
-                                                            chunkOrder, action,
-                                                            startTime, endTime, duration,
-                                                            payload, meta)
+            response = await self.measurement.add_data_rest(measurement_id, chunkOrder, action, startTime, endTime,
+                                                            duration, payload, meta)
             status = int(response.status_code)
             body = response.json()
 
@@ -386,14 +374,12 @@ class SimpleClient():
 
                 if self.conn_method == "websocket" or self.conn_method == "ws":
                     if 'MEASUREMENT_CLOSED' in body:
-                        await self.__handle_ws_timeout(chunkOrder, action, startTime,
-                                                       endTime, duration, payload, meta)
+                        await self.__handle_ws_timeout(chunkOrder, action, startTime, endTime, duration, payload, meta)
                     else:
                         self.addData_done = True
                 else:
                     if body['Code'] == 'MEASUREMENT_CLOSED':
-                        await self.__handle_ws_timeout(chunkOrder, action, startTime,
-                                                       endTime, duration, payload, meta)
+                        await self.__handle_ws_timeout(chunkOrder, action, startTime, endTime, duration, payload, meta)
                     else:
                         self.addData_done = True
             else:
@@ -403,30 +389,25 @@ class SimpleClient():
         await self.__handle_exit()
 
     # Internal: Handle websocket timeout after 120s for add data
-    async def __handle_ws_timeout(self, chunkOrder, action, startTime, endTime, duration,
-                                  payload, meta):
+    async def __handle_ws_timeout(self, chunkOrder, action, startTime, endTime, duration, payload, meta):
         # Need to wait until all previous chunks have been received
         while not self.sub_cycle_complete:  # Poll until subscribe is complete
             await asyncio.sleep(self.subscribe_poll)  # For polling
 
-        res = self.retrieve_results()         # Get results from previous measurement
+        res = self.retrieve_results()  # Get results from previous measurement
         self.measurement_id = self.create_new_measurement()
         self.sub_cycle_complete = False
         await asyncio.sleep(self.subscribe_signal)
 
         # Still need to add current chunk to new measurement
         if self.conn_method == "websocket" or self.conn_method == "ws":
-            response = await self.measurement.add_data_ws(self.measurement_id,
-                                                          chunkOrder, action, startTime,
-                                                          endTime, duration, payload,
-                                                          meta)
+            response = await self.measurement.add_data_ws(self.measurement_id, chunkOrder, action, startTime, endTime,
+                                                          duration, payload, meta)
             status = int(response[10:13].decode('utf-8'))
             body = response.decode('utf-8')
         else:
-            response = await self.measurement.add_data_rest(self.measurement_id,
-                                                            chunkOrder, action,
-                                                            startTime, endTime, duration,
-                                                            payload, meta)
+            response = await self.measurement.add_data_rest(self.measurement_id, chunkOrder, action, startTime, endTime,
+                                                            duration, payload, meta)
             status = int(response.status_code)
             body = response.json()
         if status != 200:
