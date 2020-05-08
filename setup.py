@@ -2,9 +2,9 @@ from setuptools import setup
 
 setup(
     name='dfxapiclient',
-    version='1.1.0',
+    version='1.2.0',
     packages=['dfxapiclient'],
-    install_requires=['asyncio', 'protobuf', 'requests', 'uuid', 'websockets'],
+    install_requires=['protobuf', 'requests', 'websockets'],
     setup_requires=['wheel'],
-    long_description=open('README.md').read(),
+    description='The DFX API Python SimpleClient is a minimal client for the DeepAffex API.',
 )
