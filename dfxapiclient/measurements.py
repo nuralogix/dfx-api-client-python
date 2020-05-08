@@ -1,11 +1,9 @@
-# Python dependancies
 import asyncio
 import base64
 import json
 import requests
 import uuid
 
-# Compiled proto files for websocket requests
 from .measurements_pb2 import DataRequest
 
 
@@ -63,8 +61,7 @@ class Measurement:
         res = r.json()
 
         if 'ID' not in res:
-            print(res)
-            raise Exception("Cannot create measurement")
+            raise ValueError("Could not create measurement")
 
         self.measurement_id = res['ID']
         return self.measurement_id
@@ -142,7 +139,7 @@ class Measurement:
                 try:
                     await asyncio.wait_for(self.ws_obj.handle_recieve(),
                                            timeout=self.recv_timeout)
-                except:
+                except Exception:
                     if self.end:
                         break
                     else:
@@ -158,7 +155,6 @@ class Measurement:
     # 510
     async def subscribeResults(self, data, chunk_num=0, queue=None):
         # [ 510, "1.0", "CONNECT", "subscribeResults", "/measurements/:ID/results/" ]
-        # print("\nSubscribing to results")
         if not self.ws_obj.ws:
             await self.ws_obj.connect_ws()
         await self.ws_obj.handle_send(data)
@@ -178,7 +174,7 @@ class Measurement:
             if not self.end:
                 try:
                     await self.ws_obj.handle_recieve()
-                except:
+                except Exception:
                     if self.end:
                         break
                     else:
@@ -188,28 +184,22 @@ class Measurement:
                     response = self.ws_obj.subscribeStats[0]
                     self.ws_obj.subscribeStats = self.ws_obj.subscribeStats[1:]
                     statusCode = response[10:13].decode('utf-8')
-                    # print("Status:", statusCode)
                     if statusCode != '200':
-                        raise Exception(
-                            "Unable to make a subscribe request. Please check your measurement ID."
+                        raise ValueError(
+                            f"Status Code{statusCode}: Subscribe failed. (Check measurement ID)"
                         )
-
                 elif self.ws_obj.chunks:
                     counter += 1
                     response = self.ws_obj.chunks[0]
                     self.ws_obj.chunks = self.ws_obj.chunks[1:]
-                    # print("--------------------------")
-                    # print("Data received; Chunk: "+str(counter) +
-                    #   "; Status: "+str(statusCode))
 
-                    # await self.received_data.put(response[13:])
                     if queue:
                         await queue.put(response[13:])
 
-                    if len(response[13:]
-                           ) < 1000:  # Print worker error message if there is any
-                        print(response[13:])
-
+                    if len(response[13:]) < 1000:
+                        raise ValueError(
+                            f"Status Code{response[13:]}: Subscribe failed. (Check measurement ID)"
+                        )
             else:
                 done = True
                 return done, counter
@@ -219,5 +209,4 @@ class Measurement:
         else:
             done = True
 
-        # print("--------------------------")
         return done, counter

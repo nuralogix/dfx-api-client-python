@@ -107,13 +107,13 @@ class SimpleClient():
             "demo-cn": {
                 "server_url": "https://demo.api.deepaffex.cn:9443",
                 "websocket_url": "wss://demo.api.deepaffex.cn:9080"
-            }                                                            
+            }
         }
         try:
             self.server_url = self.__valid_servers[self.server]["server_url"]
             self.websocket_url = self.__valid_servers[self.server]["websocket_url"]
-        except:
-            raise ValueError("Invalid server ID given")
+        except KeyError:
+            raise KeyError("Invalid server ID given")
 
     # Internal: Setup measurement mode
     def __measurement_mode(self):
@@ -125,8 +125,8 @@ class SimpleClient():
         }
         try:
             max_len = self.__measurement_modes[self.measurement_mode]
-        except:
-            raise ValueError("Invalid measurement mode given")
+        except KeyError:
+            raise KeyError("Invalid measurement mode given")
 
         self.num_chunks = int(self.video_length / self.chunk_length)
         self.max_chunks = int(max_len / self.chunk_length)
@@ -138,8 +138,7 @@ class SimpleClient():
             self.config_file = "./default.config"
 
         # Create empty config json file if not there
-        if not os.path.isfile(
-                self.config_file):  
+        if not os.path.isfile(self.config_file):
             with open(self.config_file, 'w') as f:
                 d = json.dumps({})
                 f.write(d)
@@ -202,7 +201,7 @@ class SimpleClient():
                 data[self.server] = {}
 
             # License key
-            if (self.license_key not in data[self.server].keys() 
+            if (self.license_key not in data[self.server].keys()
             or data[self.server][self.license_key] == {}):
                 data[self.server][self.license_key] = {}
 
@@ -216,8 +215,7 @@ class SimpleClient():
                 out = self.organization.registerLicense(self.device_name)
                 if 'Token' not in out:
                     self.__record(data=data)    # Save current state
-                    raise Exception("Registration error. Make sure your license key is valid for the selected server.")
-                    return
+                    raise PermissionError("Registration error. Make sure your license key is valid for the selected server.")
 
                 self.device_token = out['Token']
                 data[self.server][self.license_key]["device_token"] = self.device_token
@@ -235,15 +233,14 @@ class SimpleClient():
                     res = self.user.create(self.device_token)
                     if res == 'INTERNAL_ERROR':
                         self.__record(data=data)
-                        raise Exception("Cannot create new user. Check your license permissions.")
-                        return
+                        raise PermissionError("Cannot create new user. Check your license permissions.")
+
                     self.user_id = res
                     res = self.user.login(self.device_token)
 
                 elif res == "INVALID_PASSWORD":
                     self.__record(data=data)
-                    raise Exception("Incorrect login password.")
-                    return
+                    raise PermissionError("Incorrect login password.")
 
                 self.user_token = self.user.user_token
                 if self.user_token != '':
@@ -254,23 +251,15 @@ class SimpleClient():
 
         self.__record(data=data)
 
-        print("\nUser token:", self.user_token)
-        print("Please save the user token or refer to it using \"client.user_token\"")
-        return
-
     # Create a new measurement
     def create_new_measurement(self):
         try:
             self.measurement.create()
-        except:
+        except ValueError:
             self.__setup()
             self.measurement.create()
 
         self.measurement_id = self.measurement.measurement_id
-        print("\nMeasurement ID:", self.measurement_id)
-        print(
-            "Please save the measurement ID or refer to it using \"client.measurement_id\""
-        )
         return self.measurement_id
 
     # Subscribe to results to this measurement
@@ -391,14 +380,9 @@ class SimpleClient():
             body = response.json()
 
         if int(status) != 200:
-            print("Response code: ", status)
-            print("Response body: ", body)
             if int(status) == 400 or int(status) == 405:
                 if chunk_num * duration < 120 and chunk_num != 0:  # Timed out earlier than 120s
                     self.addData_done = True
-                    print(
-                        "\nAdd data timed out early. Make sure there is only one active measurement under this license."
-                    )
 
                 if self.conn_method == "websocket" or self.conn_method == "ws":
                     if 'MEASUREMENT_CLOSED' in body:
@@ -406,19 +390,15 @@ class SimpleClient():
                                                        endTime, duration, payload, meta)
                     else:
                         self.addData_done = True
-                        print("Cannot add data to this measurement.")
                 else:
                     if body['Code'] == 'MEASUREMENT_CLOSED':
                         await self.__handle_ws_timeout(chunkOrder, action, startTime,
                                                        endTime, duration, payload, meta)
                     else:
                         self.addData_done = True
-                        print("Cannot add data to this measurement.")
             else:
                 self.addData_done = True
-                print("Cannot add data to this measurement.")
 
-        # print("\nSleep for the chunk duration")
         await asyncio.sleep(duration)
         await self.__handle_exit()
 
@@ -430,13 +410,11 @@ class SimpleClient():
             await asyncio.sleep(self.subscribe_poll)  # For polling
 
         res = self.retrieve_results()         # Get results from previous measurement
-        print(res)
         self.measurement_id = self.create_new_measurement()
         self.sub_cycle_complete = False
         await asyncio.sleep(self.subscribe_signal)
 
         # Still need to add current chunk to new measurement
-        print("\nPrevious measurement timed out. Adding data to new measurement\n")
         if self.conn_method == "websocket" or self.conn_method == "ws":
             response = await self.measurement.add_data_ws(self.measurement_id,
                                                           chunkOrder, action, startTime,
@@ -452,12 +430,10 @@ class SimpleClient():
             status = int(response.status_code)
             body = response.json()
         if status != 200:
-            print("Response code: ", status)
-            print("Response body: ", body)
+            pass
 
     # Retrieve results from current measurement
     def retrieve_results(self, token='', measurement_id=''):
-        print("\nRetrieving results to this measurement")
         with open(self.config_file) as json_file:
             data = json.load(json_file)
             if token == '':
@@ -478,7 +454,6 @@ class SimpleClient():
             data = {}
             d = json.dumps(data)
             f.write(d)
-            # print("\nAll stored values in \'default.config\' have been cleared.")
 
     # Handle sudden shutdown
     async def shutdown(self):

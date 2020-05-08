@@ -108,7 +108,6 @@ class User:
         # [ 202, "1.0", "GET", "retrieve", "/users" ]
         uri = self.url + '/users'
         r = requests.get(uri, headers=self.header)
-        print(r.json())
         return r.json()
 
     # 206
@@ -116,7 +115,6 @@ class User:
         # [ 206, "1.0", "DELETE", "remove", "/users" ]
         uri = self.url + '/users'
         r = requests.delete(uri, headers=self.header)
-        print(r.json())
         return r.json()
 
     # 211
@@ -124,5 +122,4 @@ class User:
         # [ 211, "1.0", "GET", "getRole", "/users/role" ]
         uri = self.url + '/users/role'
         r = requests.get(uri, headers=self.header)
-        print(r.json())
         return r.json()

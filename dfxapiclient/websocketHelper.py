@@ -24,23 +24,13 @@ class WebsocketHandler():
         self.ws = await self.handle_connect()
 
     async def handle_connect(self):
-        try:
-            ws = await websockets.client.connect(self.ws_url, extra_headers=self.headers)
-        except:
-            raise Exception("Cannot connect to websocket")
-        # print(" Websocket Connected ")
-        return ws
+        return await websockets.client.connect(self.ws_url, extra_headers=self.headers)
 
     async def handle_close(self):
-        # print(" Closing Websocket ")
         await self.ws.close()
-        return
 
     async def handle_send(self, content):
-        try:
-            await self.ws.send(content)
-        except:
-            raise Exception("Websocket not connected")
+        await self.ws.send(content)
 
     async def handle_recieve(self):
         if self.recv:
@@ -50,6 +40,7 @@ class WebsocketHandler():
             self.recv = True
         else:
             return
+
         if response:
             wsID = response[0:10].decode('utf-8')
             # Sort out response messages by type

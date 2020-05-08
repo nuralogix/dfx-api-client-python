@@ -57,7 +57,6 @@ class Organization:
 
         uri = self.server_url + '/organizations/users'
         r = requests.post(uri, data=values, headers=header)
-        print(r.json())
         return r.json()
 
     # 717
@@ -70,5 +69,4 @@ class Organization:
 
         uri = self.server_url + '/organizations/auth'
         r = requests.post(uri, data=values, headers=header)
-        print(r.json())
         return r.json()
