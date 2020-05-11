@@ -1,20 +1,45 @@
 import json
+
 import requests
 
 
 # 2
 class User:
+    """`User` is for handling user activity
+
+    This class handles creating a user, login, getting role, and retrieving user data.
+
+    https://dfxapiversion10.docs.apiary.io/#reference/0/users
+
+    *Currently incomplete and more endpoints will be added in subsequent updates.*
+    """
     def __init__(self,
-                 url,
-                 firstname,
-                 lastname,
-                 email,
-                 password,
-                 phonenum='',
-                 gender='',
-                 dateofbirth='',
-                 height='',
-                 weight=''):
+                 url: str,
+                 firstname: str,
+                 lastname: str,
+                 email: str,
+                 password: str,
+                 phonenum: str = '',
+                 gender: str = '',
+                 dateofbirth: str = '',
+                 height: str = '',
+                 weight: str = ''):
+        """Create a User object
+
+        Arguments:
+            url {str} -- URL to connect to
+            firstname {str} -- First name
+            lastname {str} -- Last name
+            email {str} -- Email address
+            password {str} -- Password
+
+        Keyword Arguments:
+            phonenum {str} -- Phone number (default: {''})
+            gender {str} -- Gender (default: {''})
+            dateofbirth {str} -- Date of birth (default: {''})
+            height {str} -- Height (cm) (default: {''})
+            weight {str} -- Weight (kg) (default: {''})
+        """
         self.firstname = firstname
         self.lastname = lastname
         self.email = email
@@ -47,24 +72,31 @@ class User:
         self.header = {'Content-Type': 'application/json', 'Authorization': auth}
 
     # 200
-    def create(self, api_token):
-        # [ 200, "1.0", "POST", "create", "/users" ]
-        '''
-        Data format:
+    def create(self, api_token: str):
+        """Create a user using POST. Information is taken from `self.user_data`,
+        which is generated from the constructor.
+        https://dfxapiversion10.docs.apiary.io/#reference/0/users/create
 
-        values = """
-          {
-            "FirstName": "John",
-            "LastName": "Appleseed",
-            "Email": "john@example.com",
-            "Password": "testpassword",
-            "Gender": "male",
-            "DateOfBirth": "1986-02-10",
-            "HeightCm": "180",
-            "WeightKg": "70"
-          }
+        Arguments:
+            api_token {str} -- DFX token
+
+        Returns:
+            str -- User ID
         """
-        '''
+        # [ 200, "1.0", "POST", "create", "/users" ]
+        # Data format:
+        # values = """
+        #   {
+        #     "FirstName": "John",
+        #     "LastName": "Appleseed",
+        #     "Email": "john@example.com",
+        #     "Password": "testpassword",
+        #     "Gender": "male",
+        #     "DateOfBirth": "1986-02-10",
+        #     "HeightCm": "180",
+        #     "WeightKg": "70"
+        #   }
+        # """
         values = json.dumps(self.user_data)
 
         auth = 'Bearer ' + api_token
@@ -80,7 +112,17 @@ class User:
         return self.user_id
 
     # 201
-    def login(self, api_token):
+    def login(self, api_token: str):
+        """Login using POST. Information is taken from `self.user_data`,
+        which is generated from the constructor.
+        https://dfxapiversion10.docs.apiary.io/#reference/0/users/login
+
+        Arguments:
+            api_token {str} -- Device token
+
+        Returns:
+            str -- User token
+        """
         # [ 201, "1.0", "POST", "login", "/users/auth" ]
 
         values = {}
@@ -105,6 +147,12 @@ class User:
 
     # 202
     def retrieve(self):
+        """Retrieve user data using a GET.
+        https://dfxapiversion10.docs.apiary.io/#reference/0/users/retrieve
+
+        Returns:
+            str -- JSON encoded user data
+        """
         # [ 202, "1.0", "GET", "retrieve", "/users" ]
         uri = self.url + '/users'
         r = requests.get(uri, headers=self.header)
@@ -112,6 +160,12 @@ class User:
 
     # 206
     def remove(self):
+        """Remove a user using a DELETE
+        https://dfxapiversion10.docs.apiary.io/#reference/0/users/remove
+
+        Returns:
+            str -- JSON encoded response
+        """
         # [ 206, "1.0", "DELETE", "remove", "/users" ]
         uri = self.url + '/users'
         r = requests.delete(uri, headers=self.header)
@@ -119,6 +173,12 @@ class User:
 
     # 211
     def getRole(self):
+        """Get the role of a user using a GET
+        https://dfxapiversion10.docs.apiary.io/#reference/0/users/retrieve-user-role
+
+        Returns:
+            str -- JSON encoded role
+        """
         # [ 211, "1.0", "GET", "getRole", "/users/role" ]
         uri = self.url + '/users/role'
         r = requests.get(uri, headers=self.header)
