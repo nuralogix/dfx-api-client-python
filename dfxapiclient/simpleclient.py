@@ -134,8 +134,8 @@ class SimpleClient():
                 "websocket_url": "wss://demo.api.deepaffex.ai:9080"
             },
             "prod": {
-                "server_url": "https://api2.api.deepaffex.ai:9443",
-                "websocket_url": "wss://api2.api.deepaffex.ai:9080"
+                "server_url": "https://api.deepaffex.ai:9443",
+                "websocket_url": "wss://api.deepaffex.ai:9080"
             },
             "prod-cn": {
                 "server_url": "https://api.deepaffex.cn:9443",
