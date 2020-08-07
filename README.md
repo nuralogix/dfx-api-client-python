@@ -1,3 +1,5 @@
+**This library is now retired in favour of the new [dfx-apiv2-client-py](https://github.com/nuralogix/dfx-apiv2-client-py).**
+
 # DFX API Python SimpleClient
 
 The DFX API Python SimpleClient simplifies access to the DeepAffex API.
